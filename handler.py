@@ -8,6 +8,12 @@ Input format (job["input"]):
 Output:
   {"result": {"programs": [...]}, "input_truncated": bool}
 """
+import sys
+
+# حماية إضافية: لو torchvision لسه موجود في الـimage ومش متوافق مع torch (operator torchvision::nms does not exist)،
+# نخلّي transformers يعتبره مش متثبّت. الموديل نصي ومش محتاجه. لازم السطر ده يجي قبل import transformers/peft.
+sys.modules["torchvision"] = None
+
 import json
 import os
 import re
