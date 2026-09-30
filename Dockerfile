@@ -7,7 +7,7 @@ USER root
 
 ENV PYTHONUNBUFFERED=1 \
     HF_HUB_ENABLE_HF_TRANSFER=1 \
-    HF_HOME=/runpod-volume/huggingface
+    HF_HOME=/tmp/hf
 
 # نفس بيئة التدريب الناجحة على الـPod: torch 2.8.0 + CUDA 12.8 (فيها triton 3.4.0 اللي bitsandbytes 0.50.2 اشتغل معاه).
 RUN python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128

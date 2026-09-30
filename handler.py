@@ -19,8 +19,34 @@ from huggingface_hub import snapshot_download
 
 import config
 
-print("Loading tokenizer:", config.MODEL_ID)
-tokenizer = AutoTokenizer.from_pretrained(config.MODEL_ID)
+# الموديل الأساسي بييجي من "Cached models" بتاع Runpod (خانة Model في إعدادات الـendpoint)،
+# فمفيش Network Volume ومفيش تحاسب على وقت التنزيل. لو مالقاهوش في الكاش بيرجع يحمّله من HF (أبطأ وأغلى).
+MODEL_NAME = os.getenv("MODEL_NAME", config.MODEL_ID)
+HF_CACHE_ROOT = os.getenv("HF_CACHE_ROOT", "/runpod-volume/huggingface-cache/hub")
+
+
+def resolve_base_path(model_id: str) -> str:
+    org, name = model_id.split("/", 1)
+    root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
+    snaps = os.path.join(root, "snapshots")
+    refs_main = os.path.join(root, "refs", "main")
+    if os.path.isfile(refs_main):
+        cand = os.path.join(snaps, open(refs_main).read().strip())
+        if os.path.isdir(cand):
+            return cand
+    if os.path.isdir(snaps):
+        versions = sorted(d for d in os.listdir(snaps) if os.path.isdir(os.path.join(snaps, d)))
+        if versions:
+            return os.path.join(snaps, versions[0])
+    print("WARNING: الموديل مش في كاش Runpod - هيتحمّل من HF (محتاج Container Disk 80GB+).")
+    return model_id
+
+
+BASE_PATH = resolve_base_path(MODEL_NAME)
+print("Base model source:", BASE_PATH)
+
+print("Loading tokenizer...")
+tokenizer = AutoTokenizer.from_pretrained(BASE_PATH)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -32,7 +58,7 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 base_model = AutoModelForCausalLM.from_pretrained(
-    config.MODEL_ID,
+    BASE_PATH,
     quantization_config=bnb_config,
     device_map={"": 0},
     torch_dtype=torch.bfloat16,
@@ -46,6 +72,7 @@ def resolve_lora_path() -> str:
         repo_id=config.LORA_REPO,
         token=os.getenv("HF_TOKEN") or None,
         allow_patterns=["adapter_model.safetensors", "adapter_config.json"],
+        cache_dir=os.getenv("LORA_CACHE_DIR", "/tmp/lora_cache"),  # ~350MB بس، بيتنزّل كل cold start في ثواني
     )
 
 
