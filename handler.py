@@ -116,6 +116,21 @@ def parse_json_output(s: str):
     return None
 
 
+def try_repair(s: str):
+    """محاولة أخيرة لإنقاذ JSON مقطوع أو فيه أخطاء بسيطة (مفيد لو الناتج وصل لحد MAX_NEW_TOKENS)."""
+    try:
+        from json_repair import repair_json
+    except ImportError:
+        return None
+    try:
+        fixed = repair_json(s, return_objects=True)
+    except Exception:
+        return None
+    if isinstance(fixed, dict) and isinstance(fixed.get("programs"), list):
+        return fixed
+    return None
+
+
 def extract_programs(document_text: str, rep_penalty=None, no_repeat_ngram=None) -> dict:
     truncated_text, was_truncated, original_len = truncate_to_budget(
         document_text, config.MAX_INPUT_TOKENS
@@ -155,11 +170,16 @@ def extract_programs(document_text: str, rep_penalty=None, no_repeat_ngram=None)
     )
 
     parsed = parse_json_output(generated_text)
+    json_repaired = False
+    if parsed is None:
+        parsed = try_repair(generated_text)
+        json_repaired = parsed is not None
     if parsed is None:
         parsed = {"error": "invalid_json_output", "raw_output": generated_text}
 
     return {
         "result": parsed,
+        "json_repaired": json_repaired,  # True = الناتج كان مكسور/مقطوع واتصلّح، راجعه يدويًا
         "input_truncated": was_truncated,
         "input_tokens": min(original_len, config.MAX_INPUT_TOKENS),
     }
